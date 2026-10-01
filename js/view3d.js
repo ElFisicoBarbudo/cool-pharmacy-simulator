@@ -4,9 +4,12 @@ import { EffectComposer } from '../vendor/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../vendor/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/jsm/postprocessing/OutputPass.js';
+import { RectAreaLightUniformsLib } from '../vendor/jsm/lights/RectAreaLightUniformsLib.js';
 
 const SIGN = 2.4; // lado máximo de la señal en unidades del mundo
 const SIGN_Y = 2.35; // altura del centro de la señal
+RectAreaLightUniformsLib.init();
+
 export const MOUNTS = { wall: 'Fachada', flag: 'Bandera', totem: 'Tótem' };
 
 function wallTexture() {
@@ -29,12 +32,25 @@ function wallTexture() {
   return t;
 }
 
+function haloTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.25, 'rgba(255,255,255,.45)');
+  gr.addColorStop(0.6, 'rgba(255,255,255,.1)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
 /** Vista 3D con three.js: carcasa extruida, LED instanciados, bloom y luz que ilumina la fachada. */
 export class View3D {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = THREE.NoToneMapping; // conserva los colores saturados de los LED
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
     this.scene = new THREE.Scene();
@@ -47,25 +63,27 @@ export class View3D {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 0.9);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.75, 0.55);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
     this.ambientLight = new THREE.HemisphereLight(0x8aa0c8, 0x202028, 0.25);
     this.scene.add(this.ambientLight);
-    this.wash = new THREE.PointLight(0xffffff, 0, 14, 1.6);
-    this.scene.add(this.wash);
-    this.wash2 = new THREE.PointLight(0xffffff, 0, 10, 1.6);
-    this.scene.add(this.wash2);
+    this.lights = []; // luces de área que reproducen el color de cada región de la señal
+    this.halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: haloTexture(), color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, fog: false, depthTest: true,
+    }));
+    this.scene.add(this.halo);
 
     this.env = new THREE.Group();
     this.scene.add(this.env);
     this.signGroup = new THREE.Group();
     this.scene.add(this.signGroup);
 
-    this.wallMat = new THREE.MeshStandardMaterial({ map: wallTexture(), roughness: 0.92, metalness: 0 });
+    this.wallMat = new THREE.MeshStandardMaterial({ map: wallTexture(), roughness: 0.88, metalness: 0 });
     this.wallMat.map.repeat.set(4, 3);
-    this.groundMat = new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.55, metalness: 0.2 });
+    this.groundMat = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.28, metalness: 0.15 });
     this.metal = new THREE.MeshStandardMaterial({ color: 0x1a1d22, metalness: 0.7, roughness: 0.4 });
     this.model = null;
     this.mount = 'wall';
@@ -154,9 +172,9 @@ export class View3D {
     this.wall.position.z = 0;
     this.wallMat.map.repeat.set(4, 3);
     if (this.mount === 'wall') {
-      this.sign.position.set(0, SIGN_Y, depth / 2 + 0.06);
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.1), dark);
-      plate.position.set(0, SIGN_Y, 0.05);
+      this.sign.position.set(0, SIGN_Y, depth / 2 + 0.22);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.2), dark);
+      plate.position.set(0, SIGN_Y, 0.1);
       g.add(plate);
       this._cam(new THREE.Vector3(0, SIGN_Y + 0.25, 7.2), new THREE.Vector3(0, SIGN_Y - 0.15, 0));
     } else if (this.mount === 'flag') {
@@ -185,9 +203,47 @@ export class View3D {
       this._cam(new THREE.Vector3(3.8, SIGN_Y + 0.4, 6.8), new THREE.Vector3(0, SIGN_Y - 0.3, 0.5));
     }
     g.add(this.sign);
-    const wp = this.sign.position;
-    this.wash.position.set(wp.x, wp.y, wp.z + (this.mount === 'wall' ? 1.4 : 1.8));
-    this.wash2.position.set(wp.x, wp.y - 1.2, wp.z + 2.4);
+    g.updateMatrixWorld(true);
+    this._buildLights(W, H, zf, this.mount !== 'wall');
+    const wp = this.sign.getWorldPosition(new THREE.Vector3());
+    this.halo.position.set(wp.x, wp.y, this.mount === 'wall' ? 0.25 : wp.z);
+    this.halo.scale.setScalar(W * 2.4);
+  }
+
+  /** Reparte la señal en regiones; cada una emite luz de área con su color medio. */
+  _buildLights(W, H, zf, double) {
+    this.lights.forEach((l) => { this.scene.remove(l.light); l.light.dispose?.(); });
+    this.lights = [];
+    const m = this.model, wide = m.aspect > 2;
+    const nx = wide ? (double ? 4 : 6) : (double ? 2 : 3), ny = wide ? 1 : (double ? 2 : 3);
+    this.nBins = nx * ny;
+    this.binOf = new Int16Array(m.leds.length);
+    this.binN = new Float32Array(this.nBins);
+    m.leds.forEach((l, i) => {
+      const b = Math.min(ny - 1, Math.floor(l.y * ny)) * nx + Math.min(nx - 1, Math.floor(l.x * nx));
+      this.binOf[i] = b; this.binN[b]++;
+    });
+    this.maxBin = Math.max(...this.binN) || 1;
+    this.binSum = new Float32Array(this.nBins * 3);
+    for (let by = 0; by < ny; by++) {
+      for (let bx = 0; bx < nx; bx++) {
+        const bin = by * nx + bx;
+        if (!this.binN[bin]) continue;
+        const cx = ((bx + 0.5) / nx - 0.5) * W, cy = -((by + 0.5) / ny - 0.5) * H;
+        // En fachada, además, una luz trasera ilumina la pared (sin espejar el eje x)
+        for (const side of double ? [1, -1] : [1, 'wall']) {
+          const wall = side === 'wall';
+          const sx = side === -1 ? -1 : 1, sz = wall ? -1 : side;
+          const light = new THREE.RectAreaLight(0xffffff, 0, W / nx, H / ny);
+          const p = this.sign.localToWorld(new THREE.Vector3(sx * cx, cy, sz * (zf + (wall ? 0 : 0.06))));
+          const t = this.sign.localToWorld(new THREE.Vector3(sx * cx, cy, sz * (zf + 3)));
+          light.position.copy(p);
+          light.lookAt(t);
+          this.scene.add(light);
+          this.lights.push({ light, bin });
+        }
+      }
+    }
   }
 
   _cam(pos, target) {
@@ -213,24 +269,31 @@ export class View3D {
   render(engine) {
     if (!this.front) return;
     const buf = engine.buf, col = this.front.instanceColor.array;
-    const gain = 1.15;
-    for (let i = 0; i < buf.length; i++) col[i] = buf[i] * gain + 0.012;
+    const sum = this.binSum;
+    sum.fill(0);
+    for (let i = 0, n = this.binOf.length; i < n; i++) {
+      const r = buf[i * 3], g = buf[i * 3 + 1], b = buf[i * 3 + 2], k = this.binOf[i] * 3;
+      col[i * 3] = r + 0.012; col[i * 3 + 1] = g + 0.012; col[i * 3 + 2] = b + 0.012;
+      sum[k] += r; sum[k + 1] += g; sum[k + 2] += b;
+    }
     this.front.instanceColor.needsUpdate = true;
 
     const amb = this.ambient;
+    const dim = 1 - amb * 0.8;
+    const KI = 16 * dim; // intensidad de las luces de área
+    for (const { light, bin } of this.lights) {
+      const n = this.binN[bin], d = (n / this.maxBin) / n;
+      light.color.setRGB(sum[bin * 3] * d, sum[bin * 3 + 1] * d, sum[bin * 3 + 2] * d);
+      light.intensity = KI;
+    }
     const avg = engine.averageColor();
-    const peak = Math.max(avg[0], avg[1], avg[2], 0.0001);
-    const k = 1 / peak;
-    const intensity = Math.min(1, peak * 1.6);
-    this.wash.color.setRGB(avg[0] * k, avg[1] * k, avg[2] * k);
-    this.wash2.color.copy(this.wash.color);
-    this.wash.intensity = intensity * 9 * (1 - amb * 0.7);
-    this.wash2.intensity = intensity * 3 * (1 - amb * 0.7);
+    const peak = Math.max(avg[0], avg[1], avg[2]);
+    this.halo.material.color.setRGB(avg[0], avg[1], avg[2]);
+    this.halo.material.opacity = this.mount === 'wall' ? 0 : Math.min(0.55, peak * 1.6) * dim;
     this.ambientLight.intensity = 0.22 + amb * 2.6;
-    this.renderer.toneMappingExposure = 1 + amb * 0.35;
     this.scene.background = new THREE.Color().setHSL(0.62, 0.45, 0.025 + amb * 0.5);
     this.scene.fog = new THREE.Fog(this.scene.background, 18, 40);
-    this.bloom.strength = 0.6 * (1 - amb * 0.75);
+    this.bloom.strength = 0.75 * (1 - amb * 0.8);
     this.controls.update();
     this.composer.render();
   }

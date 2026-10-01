@@ -11,7 +11,7 @@ export const PALETTES = [
 export const DEFAULT_COLORS = PALETTES[0].colors;
 export const BICOLOR_DEFAULT = ['#00ff00', '#ff0000', '#ffff00'];
 
-const s = (anim, colors, extra = {}) => ({ anim, colors, params: {}, speed: 1, audioMix: 0, rev: 0, ...extra });
+const s = (anim, colors, extra = {}) => ({ anim, colors, params: {}, speed: 1, rev: 0, ...extra });
 
 /** Programas de ejemplo: listas de escenas con su duración (segundos). */
 export const PROGRAMS = {
@@ -31,17 +31,17 @@ export const PROGRAMS = {
     { name: 'Centelleo', dur: 7, scene: s('sparkle', ['#ffe27a', '#7cf3ff', '#ffffff']) },
     { name: 'Construcción', dur: 8, scene: s('build', ['#00ff66', '#ffffff', '#00a8ff']) },
   ],
-  'Fiesta (con música)': [
-    { name: 'Flash al ritmo', dur: 12, scene: s('beatflash', ['#ff00c8', '#00f0ff', '#faff00']) },
-    { name: 'Espectro', dur: 12, scene: s('spectrum', ['#00ff66', '#ff2a00', '#ffffff']) },
-    { name: 'Ondas al ritmo', dur: 12, scene: s('beatripple', ['#7c4dff', '#00e5ff', '#ffffff']) },
-    { name: 'Color por música', dur: 12, scene: s('audiocolor', DEFAULT_COLORS) },
-    { name: 'Persecución rítmica', dur: 12, scene: s('audiochase', ['#ff5ea8', '#7cf3ff', '#ffffff']) },
+  'Fiesta': [
+    { name: 'Arcoíris radial', dur: 8, scene: s('rainbow', DEFAULT_COLORS, { params: { mode: 1 } }) },
+    { name: 'Emergencia', dur: 6, scene: s('police', ['#ff00c8', '#00f0ff', '#ffffff']) },
+    { name: 'Centelleo', dur: 8, scene: s('sparkle', ['#ff5ea8', '#7cf3ff', '#ffffff']) },
+    { name: 'Persecución', dur: 8, scene: s('chase', ['#faff00', '#ff00c8', '#ffffff'], { params: { heads: 4 } }) },
+    { name: 'Plasma', dur: 8, scene: s('plasma', DEFAULT_COLORS) },
   ],
   'Cartel con mensajes (pantalla)': [
-    { name: 'Texto', dur: 14, scene: s('text', ['#00ff66', '#00ff66', '#ffffff'], { params: { src: 0, rb: 0 } }) },
+    { name: 'Texto', dur: 14, scene: s('text', ['#00ff66', '#00ff66', '#ffffff'], { params: { src: 0, rb: 0, msg: 'FARMACIA 24 H' } }) },
     { name: 'Reloj', dur: 8, scene: s('text', ['#ffb000', '#ffb000', '#ffffff'], { params: { src: 1, rb: 0 } }) },
-    { name: 'Texto arcoíris', dur: 14, scene: s('text', DEFAULT_COLORS, { params: { src: 0, rb: 1 } }) },
+    { name: 'Texto arcoíris', dur: 14, scene: s('text', DEFAULT_COLORS, { params: { src: 0, rb: 1, msg: 'FARMACIA DE GUARDIA' } }) },
     { name: 'Lluvia digital', dur: 8, scene: s('rain', ['#00ff66', '#ffffff', '#00a8ff']) },
   ],
 };

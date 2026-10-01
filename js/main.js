@@ -1,8 +1,7 @@
-import { AudioEngine } from './audio.js';
 import { Engine } from './engine.js';
 import { View2D } from './view2d.js';
 import { MODELS, BICOLOR_CHOICES } from './models.js';
-import { compileCustom, getEffect, effectAvailable } from './effects.js';
+import { compileCustom, registerFrames, getEffect, effectAvailable } from './effects.js';
 import { DEFAULT_COLORS, BICOLOR_DEFAULT } from './presets.js';
 import { initUI } from './ui.js';
 import { debounce } from './util.js';
@@ -12,11 +11,10 @@ const $ = (s) => document.querySelector(s);
 
 const defaults = () => ({
   model: 'rgb-pro', view: '2d', mount: 'wall', ambient: 0, autoRotate: false,
-  power: true, brightness: 1, speed: 1, text: 'FARMACIA 24 H',
-  scene: { anim: 'rainbow', colors: [...DEFAULT_COLORS], params: {}, speed: 1, audioMix: 0, rev: 0 },
-  customs: [],
+  power: true, brightness: 1, speed: 1,
+  scene: { anim: 'rainbow', colors: [...DEFAULT_COLORS], params: {}, speed: 1, rev: 0 },
+  customs: [], frameAnims: [],
   seq: { items: [], playing: false, idx: 0, elapsed: 0 },
-  audio: { sens: 1, auto: true },
 });
 
 function load() {
@@ -33,8 +31,7 @@ function load() {
 }
 
 const state = load();
-const audio = new AudioEngine();
-const engine = new Engine(audio);
+const engine = new Engine();
 const v2 = new View2D($('#c2d'));
 let v3 = null;
 let v3Module = null;
@@ -42,7 +39,8 @@ let v3Module = null;
 const save = debounce(() => {
   try {
     const { seq, ...rest } = state;
-    localStorage.setItem(KEY, JSON.stringify({ ...rest, seq: { items: seq.items } }));
+    const skip = (k, v) => (k === '_rgb' || k === 'hold' ? undefined : v);
+    localStorage.setItem(KEY, JSON.stringify({ ...rest, seq: { items: seq.items } }, skip));
   } catch (_) { /* nada */ }
 }, 400);
 
@@ -56,6 +54,8 @@ function toast(msg, err = false) {
 
 // Registrar animaciones personalizadas guardadas
 state.customs.forEach((c) => compileCustom(c.id, c.name, c.code));
+state.frameAnims = (state.frameAnims || []).filter((f) => MODELS[f.model] && Array.isArray(f.frames) && f.frames.length);
+state.frameAnims.forEach(registerFrames);
 
 /** Escena que se está mostrando: la del secuenciador si está en marcha, o la manual. */
 function liveScene() {
@@ -72,7 +72,7 @@ function normalizeScene() {
   } else if (sc.colors.length < 3 || !/^#/.test(sc.colors[0])) {
     sc.colors = [...DEFAULT_COLORS];
   }
-  if (!effectAvailable(getEffect(sc.anim), { ...model, zoneCount: model.zones.length })) { sc.anim = 'pulse'; sc.params = {}; }
+  if (!effectAvailable(getEffect(sc.anim), { ...model, id: state.model, zoneCount: model.zones.length })) { sc.anim = 'pulse'; sc.params = {}; }
 }
 
 async function ensure3D() {
@@ -87,7 +87,7 @@ async function ensure3D() {
 }
 
 const app = {
-  state, engine, audio, toast, save,
+  state, engine, v2, toast, save,
   get v3() { return v3; },
   liveScene,
   setModel(id) {
@@ -128,8 +128,6 @@ function resize() {
 }
 new ResizeObserver(resize).observe($('#stage'));
 
-audio.sens = state.audio.sens;
-audio.auto = state.audio.auto;
 normalizeScene();
 engine.setModel(state.model);
 engine.global = state;
@@ -143,7 +141,6 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  audio.update(dt);
 
   const sq = state.seq;
   if (sq.playing && sq.items.length) {

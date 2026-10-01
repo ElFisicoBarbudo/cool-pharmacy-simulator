@@ -9,12 +9,11 @@ const FADE = 0.7; // segundos de fundido entre animaciones
  * El resultado queda en `buf` (RGB 0..1 por LED, ya con el color físico del LED aplicado).
  */
 export class Engine {
-  constructor(audio) {
-    this.audio = audio;
+  constructor() {
     this.cur = null;
     this.prev = null;
     this.fade = 1;
-    this.global = { power: true, brightness: 1, speed: 1, text: 'FARMACIA 24 H' };
+    this.global = { power: true, brightness: 1, speed: 1 };
     this.o = [0, 0, 0];
     this.m = [0, 0, 0];
     this.t = [0, 0, 0];
@@ -62,22 +61,16 @@ export class Engine {
     const [c1, c2, c3] = this._palette(sc);
     const c = rt.c;
     c.t = rt.time; c.dt = dt * speed; c.c1 = c1; c.c2 = c2; c.c3 = c3;
-    c.p = sc.params || {}; c.audio = this.audio.state; c.model = this.model;
-    c.state = rt.state; c.text = g.text;
+    c.p = sc.params || {}; c.model = this.model;
+    c.state = rt.state;
     const ef = rt.effect;
     if (ef.frame) ef.frame(c);
     const o = this.o;
     const leds = this.leds;
-    const mixAudio = ef.audio ? 0 : sc.audioMix || 0;
-    let gain = 1;
-    if (mixAudio > 0) {
-      const a = c.audio;
-      gain = 1 - mixAudio + mixAudio * clamp(0.15 + a.level * 1.5 + a.beat * 0.45, 0, 1.5);
-    }
     for (let i = 0; i < leds.length; i++) {
       ef.px(leds[i], c, o);
       const k = i * 3;
-      dest[k] = o[0] * gain; dest[k + 1] = o[1] * gain; dest[k + 2] = o[2] * gain;
+      dest[k] = o[0]; dest[k + 1] = o[1]; dest[k + 2] = o[2];
     }
   }
 

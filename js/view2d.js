@@ -10,6 +10,23 @@ export class View2D {
     this.model = null;
     this.ambient = 0;
     this.w = this.h = 0;
+    this.editMode = false; // resalta los LED apagados y muestra el cursor
+    this.hover = -1;
+  }
+
+  /** Índice del LED bajo un punto de pantalla (clientX/Y), o -1. */
+  hit(clientX, clientY) {
+    if (!this.model) return -1;
+    const b = this.canvas.getBoundingClientRect();
+    const sx = this.w / b.width, sy = this.h / b.height;
+    const px = (clientX - b.left) * sx, py = (clientY - b.top) * sy;
+    const R = this._rect(), reach = Math.max(this.model.ledR * R.W * 1.7, 6);
+    let best = -1, bd = reach * reach;
+    this.model.leds.forEach((l, i) => {
+      const dx = R.x + l.x * R.W - px, dy = R.y + l.y * R.H - py, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
   }
 
   setModel(model) { this.model = model; this.dirty = true; }
@@ -157,5 +174,21 @@ export class View2D {
     ctx.drawImage(this.glow2, 0, 0, w, h);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
+
+    if (this.editMode) {
+      ctx.lineWidth = Math.max(1, lr * 0.18);
+      ctx.strokeStyle = 'rgba(255,255,255,.28)';
+      ctx.beginPath();
+      for (const l of m.leds) {
+        const x = R.x + l.x * R.W, y = R.y + l.y * R.H;
+        ctx.moveTo(x + lr * 1.12, y); ctx.arc(x, y, lr * 1.12, 0, TAU);
+      }
+      ctx.stroke();
+      if (this.hover >= 0 && m.leds[this.hover]) {
+        const l = m.leds[this.hover];
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(2, lr * 0.3);
+        ctx.beginPath(); ctx.arc(R.x + l.x * R.W, R.y + l.y * R.H, lr * 1.45, 0, TAU); ctx.stroke();
+      }
+    }
   }
 }

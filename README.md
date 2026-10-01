@@ -1,7 +1,7 @@
 # Cool Pharmacy Simulator
 
 Simulador web de **señal luminosa de farmacia** (la cruz verde): modelos de señal, animaciones
-prediseñadas y personalizadas, vista 3D y reactividad al sonido. Todo en HTML + JavaScript puro,
+prediseñadas y personalizadas, dibujo fotograma a fotograma y vista 3D. Todo en HTML + JavaScript puro,
 sin compilación.
 
 ## Cómo usarlo
@@ -41,21 +41,13 @@ Los modelos de un solo color solo ofrecen animaciones de brillo; las que generan
 - Secuenciador: encadena escenas con duración propia, carga programas de ejemplo y exporta/importa JSON.
 
 **Vista 2D y 3D** (three.js): montaje en fachada, bandera o tótem, cámara orbital, bloom, luz que ilumina
-la pared con el color de la señal, selector noche/día, captura PNG y pantalla completa (tecla `F`).
+la pared con los colores de cada zona de la señal, selector noche/día, captura PNG y pantalla completa (tecla `F`).
 
-**Audio reactivo** (pestaña *Audio*): graves / medios / agudos, espectro de 32 bandas y detección de ritmo.
-Fuentes: pista demo interna, micrófono, archivo local y captura del audio de una pestaña.
+**Fotograma a fotograma** (pestaña *Fotogramas*): dibuja cada fotograma encendiendo los LED uno a uno
+(clic o arrastrar; clic derecho borra), con tira de fotogramas, duplicar/mover, deshacer y previsualización.
 
-### YouTube y Spotify
-
-Se pueden incrustar pegando el enlace, pero los navegadores **no dejan analizar el audio de un iframe de
-otro dominio**. La forma que funciona es capturar el sonido de la pestaña:
-
-1. Carga el enlace en el reproductor incrustado y pulsa play.
-2. Pulsa **🖥 Esta pestaña** y marca *Compartir audio de la pestaña*.
-
-Solo funciona en **Chrome / Edge de escritorio**. En Firefox y Safari usa micrófono o archivo.
-Spotify sin sesión iniciada reproduce fragmentos de 30 s.
+**Texto personalizable**: con el efecto *Texto / Reloj* en la pantalla matriz, escribe tu mensaje en el panel
+de la animación (hay frases rápidas). Cada escena del secuenciador guarda su propio texto.
 
 ## Estructura
 
@@ -65,7 +57,7 @@ css/style.css
 js/models.js      geometría y tipo de LED de cada señal
 js/effects.js     animaciones + compilador de animaciones propias
 js/engine.js      calcula el color de cada LED por fotograma
-js/audio.js       captura y análisis de audio
+js/frames.js      editor fotograma a fotograma
 js/view2d.js      render canvas 2D
 js/view3d.js      render three.js
 js/ui.js, main.js interfaz, estado y bucle principal

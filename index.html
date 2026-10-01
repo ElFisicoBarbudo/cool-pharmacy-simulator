@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cool Pharmacy Simulator</title>
-<meta name="description" content="Simulador de señal luminosa de farmacia: modelos, animaciones personalizadas, vista 3D y reactividad al sonido.">
+<meta name="description" content="Simulador de señal luminosa de farmacia: modelos, animaciones personalizadas, fotograma a fotograma y vista 3D.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101418'/%3E%3Cpath d='M12 5h8v7h7v8h-7v7h-8v-7H5v-8h7z' fill='%2319ff5c'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
@@ -50,18 +50,14 @@
       <nav class="tabs" role="tablist">
         <button role="tab" data-tab="model" class="on">Señal</button>
         <button role="tab" data-tab="anim">Animación</button>
-        <button role="tab" data-tab="studio">Estudio</button>
-        <button role="tab" data-tab="audio">Audio</button>
+        <button role="tab" data-tab="frames">Fotogramas</button>
+        <button role="tab" data-tab="studio">Código</button>
       </nav>
 
       <div class="tabpane on" id="pane-model">
         <h3>Modelo de señal</h3>
         <p class="hint">Desde el modelo básico de un solo color hasta pantallas matriz RGB. Los efectos disponibles dependen del tipo de LED.</p>
         <div class="models" id="modelList"></div>
-        <label class="field" id="textField">Texto de la pantalla
-          <input type="text" id="textInput" maxlength="80" spellcheck="false">
-          <small>Se usa con el efecto «Texto / Reloj» en las pantallas matriz.</small>
-        </label>
       </div>
 
       <div class="tabpane" id="pane-anim">
@@ -73,11 +69,7 @@
           <div id="effectParams"></div>
           <h3>Colores</h3>
           <div id="colorBox"></div>
-          <h3>Sonido</h3>
-          <label class="field">Modular el brillo con la música
-            <input type="range" id="audioMix" min="0" max="1" step="0.01" value="0">
-            <small id="audioMixHint">Hace que cualquier animación «respire» con el volumen. Activa una fuente en la pestaña Audio.</small>
-          </label>
+          <h3>Velocidad</h3>
           <label class="field">Velocidad de esta animación
             <input type="range" id="sceneSpeed" min="0.2" max="3" step="0.05" value="1">
           </label>
@@ -85,8 +77,8 @@
       </div>
 
       <div class="tabpane" id="pane-studio">
-        <h3>Editor de animaciones</h3>
-        <p class="hint">Crea tu propio efecto con una función de JavaScript que decide el color de cada LED. Se ve en directo y se guarda en tu navegador.</p>
+        <h3>Editor de código</h3>
+        <p class="hint">Crea tu propio efecto con una función de JavaScript que decide el color de cada LED. Se ve en directo y se guarda en tu navegador. Para dibujar a mano, usa la pestaña Fotogramas.</p>
         <div class="row">
           <select id="customSel" class="grow"></select>
           <button id="customNew">＋ Nueva</button>
@@ -118,44 +110,46 @@
         </div>
       </div>
 
-      <div class="tabpane" id="pane-audio">
-        <h3>Fuente de sonido</h3>
-        <div class="srcs">
-          <button data-src="demo">🎵 Pista demo</button>
-          <button data-src="mic">🎤 Micrófono</button>
-          <button data-src="tab-self">🖥 Esta pestaña</button>
-          <button data-src="tab">🪟 Otra pestaña</button>
-          <button data-src="file">📁 Archivo</button>
-          <button data-src="stop" class="danger">⏹ Detener</button>
-        </div>
-        <input type="file" id="audioFile" accept="audio/*" hidden>
-        <audio id="audioEl" controls hidden></audio>
-        <div class="status" id="audioStatus"></div>
-
-        <div class="meters">
-          <div class="meter"><span>Graves</span><i><b id="mBass"></b></i></div>
-          <div class="meter"><span>Medios</span><i><b id="mMid"></b></i></div>
-          <div class="meter"><span>Agudos</span><i><b id="mTreble"></b></i></div>
-          <div class="meter"><span>Ritmo</span><i><b id="mBeat"></b></i></div>
-        </div>
-        <canvas id="spec" width="320" height="56"></canvas>
-
-        <label class="field">Sensibilidad <input type="range" id="sens" min="0.3" max="3" step="0.05" value="1"></label>
-        <label class="inline"><input type="checkbox" id="autoGain" checked> Ganancia automática</label>
-        <label class="inline"><input type="checkbox" id="demoMute"> Silenciar pista demo</label>
-
-        <h3>YouTube / Spotify</h3>
+      <div class="tabpane" id="pane-frames">
+        <h3>Animación fotograma a fotograma</h3>
+        <p class="hint">Dibuja cada fotograma encendiendo los LED uno a uno: haz clic o arrastra sobre la señal (clic derecho para borrar). Cada animación pertenece al modelo de señal con el que se creó.</p>
         <div class="row">
-          <input type="text" id="embedUrl" class="grow" placeholder="Pega un enlace de YouTube o Spotify" spellcheck="false">
-          <button id="embedLoad">Cargar</button>
+          <select id="frameSel" class="grow"></select>
+          <button id="frameNew">＋ Nueva</button>
+          <button id="frameDel" class="danger" title="Eliminar animación">🗑</button>
         </div>
-        <div id="embedBox"></div>
-        <ol class="steps">
-          <li>Carga el enlace y dale a <b>play</b> en el reproductor.</li>
-          <li>Pulsa <b>🖥 Esta pestaña</b> y, al compartir, marca <b>«Compartir audio de la pestaña»</b>.</li>
-          <li>Las animaciones de ♪ Sonido empezarán a reaccionar.</li>
-        </ol>
-        <p class="hint">Los navegadores no permiten analizar directamente el audio de YouTube o Spotify incrustados, por eso se captura el sonido de la pestaña (Chrome / Edge de escritorio). En Firefox y Safari usa el micrófono o un archivo. Spotify sin sesión iniciada reproduce solo fragmentos de 30 s.</p>
+        <div id="frameBox" hidden>
+          <label class="field">Nombre <input type="text" id="frameName" maxlength="40"></label>
+
+          <h3>Pincel</h3>
+          <div class="row">
+            <div class="seg" role="group" aria-label="Herramienta">
+              <button data-tool="paint" class="on">Pintar</button>
+              <button data-tool="erase">Borrar</button>
+            </div>
+          </div>
+          <div id="frameColors" class="swatches"></div>
+          <div class="row">
+            <button id="frameFill">Rellenar todo</button>
+            <button id="frameClear">Vaciar</button>
+            <button id="frameUndo">↶ Deshacer</button>
+          </div>
+
+          <h3>Fotogramas</h3>
+          <div class="filmstrip" id="filmstrip"></div>
+          <div class="row wrap">
+            <button id="frameAdd">＋ Nuevo</button>
+            <button id="frameDup">⧉ Duplicar</button>
+            <button id="frameRemove" class="danger">✕ Quitar</button>
+            <button id="frameLeft" title="Mover a la izquierda">◀</button>
+            <button id="frameRight" title="Mover a la derecha">▶</button>
+          </div>
+          <div class="row">
+            <button id="framePlay" class="primary">▶ Previsualizar</button>
+            <label class="inline grow">Fotogramas/s <input type="range" id="frameFps" min="1" max="30" step="1" value="4"><b id="frameFpsVal">4</b></label>
+          </div>
+          <small>Para usarla en el cartel: pestaña <b>Animación</b> → «Mis animaciones», o añádela al secuenciador en <b>Código</b>.</small>
+        </div>
       </div>
     </aside>
   </main>

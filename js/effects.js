@@ -5,7 +5,7 @@ import { textBitmap } from './text.js';
  * Cada efecto implementa px(L, c, o): recibe un LED (L), el contexto del fotograma (c)
  * y escribe el color RGB (0..1) en o. Opcionalmente frame(c) se llama una vez por fotograma.
  *   c.t      tiempo de animación (ya multiplicado por la velocidad)
- *   c.c1..3  colores de paleta  ·  c.p  parámetros del efecto  ·  c.audio  análisis de sonido
+ *   c.c1..3  colores de paleta  ·  c.p  parámetros del efecto
  */
 
 export const GROUPS = [
@@ -13,7 +13,6 @@ export const GROUPS = [
   { id: 'motion', name: 'Movimiento' },
   { id: 'color', name: 'Color' },
   { id: 'fx', name: 'Efectos' },
-  { id: 'audio', name: '♪ Sonido' },
   { id: 'custom', name: 'Mis animaciones' },
 ];
 
@@ -210,6 +209,8 @@ export const EFFECTS = [
     desc: 'Mensaje desplazable o reloj. Solo en pantallas matriz.',
     params: [
       { id: 'src', label: 'Mostrar', type: 'select', options: ['Texto', 'Hora'], def: 0 },
+      { id: 'msg', label: 'Mensaje', type: 'text', def: 'FARMACIA 24 H', show: (p) => (p.src ?? 0) === 0,
+        presets: ['FARMACIA 24 H', 'FARMACIA DE GUARDIA', 'ABIERTO', 'CERRADO', 'BUENAS NOCHES'] },
       { id: 'rb', label: 'Color', type: 'select', options: ['Sólido', 'Arcoíris'], def: 0 },
     ],
     frame(c) {
@@ -221,7 +222,7 @@ export const EFFECTS = [
         const txt = String(d.getHours()).padStart(2, '0') + colon + String(d.getMinutes()).padStart(2, '0');
         c.bmp = textBitmap(txt, g.h); c.scroll = false;
       } else {
-        c.bmp = textBitmap(c.text || ' ', g.h); c.scroll = true;
+        c.bmp = textBitmap(c.p.msg ?? 'FARMACIA 24 H', g.h); c.scroll = true;
       }
     },
     px(L, c, o) {
@@ -237,88 +238,6 @@ export const EFFECTS = [
     },
   },
 
-  // ─────────── Sonido ───────────
-  {
-    id: 'vu', name: 'Vúmetro', group: 'audio', audio: true, icon: '▮',
-    desc: 'La señal se llena según el volumen, con marca de pico.',
-    frame(c) {
-      const s = c.state;
-      s.peak = Math.max(c.audio.level, (s.peak ?? 0) - c.dt * 0.4);
-    },
-    px(L, c, o) {
-      const u = c.model.aspect > 2 ? L.x : 1 - L.y;
-      const lv = c.audio.level;
-      const lit = smoothstep(lv + 0.03, lv - 0.03, u);
-      const col = u < 0.55 ? c.c1 : u < 0.8 ? c.c3 : c.c2;
-      set(o, col, 0.03 + lit);
-      if (Math.abs(u - c.state.peak) < 0.04) { o[0] = o[1] = o[2] = 1; }
-    },
-  },
-  {
-    id: 'beatflash', name: 'Flash al ritmo', group: 'audio', audio: true, icon: '◉',
-    desc: 'Cada golpe de bombo dispara un destello que va alternando de color.',
-    px(L, c, o) {
-      const col = c.audio.beatCount % 2 ? c.c2 : c.c1;
-      set(o, col, 0.05 + Math.pow(c.audio.beat, 1.5) * 1.1);
-    },
-  },
-  {
-    id: 'spectrum', name: 'Espectro', group: 'audio', audio: true, icon: '▂▅▇',
-    desc: 'Ecualizador: graves a la izquierda, agudos a la derecha.',
-    px(L, c, o) {
-      const n = c.audio.spec.length;
-      const bin = Math.min(n - 1, Math.floor(L.x * n));
-      const v = c.audio.spec[bin];
-      const u = 1 - L.y;
-      const lit = smoothstep(v + 0.04, v - 0.04, u);
-      mixSet(o, c.c1, c.c2, u, 0.03 + lit);
-    },
-  },
-  {
-    id: 'bassglow', name: 'Pulso de graves', group: 'audio', audio: true, icon: '◍',
-    desc: 'Un resplandor central que late con los graves.',
-    px(L, c, o) {
-      const b = Math.pow(c.audio.bass, 1.4);
-      mixSet(o, c.c1, c.c2, c.audio.treble, clamp(b * 1.5 - L.r * 0.7 + 0.12));
-    },
-  },
-  {
-    id: 'beatripple', name: 'Ondas al ritmo', group: 'audio', audio: true, icon: '◎',
-    desc: 'Cada golpe lanza un anillo desde el centro.',
-    frame(c) {
-      const s = c.state;
-      s.rips = s.rips || [];
-      if (s.last !== c.audio.beatCount) { s.last = c.audio.beatCount; s.rips.push(c.t); if (s.rips.length > 6) s.rips.shift(); }
-    },
-    px(L, c, o) {
-      let v = 0;
-      for (const t0 of c.state.rips) {
-        const age = c.t - t0;
-        v += bump(L.r, age * 0.9, 0.13) * Math.max(0, 1 - age / 1.3);
-      }
-      mixSet(o, c.c1, c.c2, L.r, 0.04 + v);
-    },
-  },
-  {
-    id: 'audiocolor', name: 'Color por música', group: 'audio', audio: true, needs: 'rgb', icon: '🎨',
-    desc: 'El tono cambia con los agudos y el brillo con el volumen.',
-    px(L, c, o) {
-      const k = hsv(c.t * 0.05 + c.audio.treble * 0.35 + L.x * 0.25, 1, 0.12 + c.audio.level * 1.1);
-      o[0] = k[0]; o[1] = k[1]; o[2] = k[2];
-    },
-  },
-  {
-    id: 'audiochase', name: 'Persecución rítmica', group: 'audio', audio: true, icon: '↻',
-    desc: 'La luz gira más rápido cuanto más fuerte suena.',
-    frame(c) {
-      const s = c.state;
-      s.pos = (s.pos ?? 0) + c.dt * (0.08 + c.audio.level * 1.4 + c.audio.beat * 0.4);
-    },
-    px(L, c, o) {
-      const d = fract(c.state.pos - L.p * 2);
-      mixSet(o, c.c1, c.c2, d, 0.04 + Math.pow(1 - d, 3) * (0.5 + c.audio.level));
-    },
-  },
 ];
 
 // ───────────────────────── Animaciones personalizadas ─────────────────────────
@@ -333,7 +252,6 @@ const HELPERS = {
 
 export const CUSTOM_TEMPLATE = `// x, y     posición del LED (0 a 1, y hacia abajo)
 // i         índice del LED          · t   tiempo en segundos (según velocidad)
-// a         sonido: a.level a.bass a.mid a.treble a.beat a.spec[]  (0 a 1)
 // L         más datos: L.r (radio) L.ang (ángulo) L.p (recorrido) L.zone L.gx L.gy
 // c1,c2,c3  colores de la paleta  ·  utilidades: sin, hsv, mix, noise, smoothstep…
 // Devuelve [r,g,b] (0 a 1), un color "#rrggbb", o un número 0-1 (brillo del color 1)
@@ -343,26 +261,25 @@ return mix(c1, c2, onda);`;
 
 export const CUSTOM_EXAMPLES = {
   'Onda diagonal': CUSTOM_TEMPLATE,
-  'Arcoíris con graves': `// El arcoíris respira con los graves
-return hsv(x * 0.6 + t * 0.1, 1, 0.35 + a.bass * 0.8);`,
+  'Arcoíris que respira': `// El arcoíris sube y baja de brillo
+return hsv(x * 0.6 + t * 0.1, 1, 0.55 + sin(t * 2) * 0.45);`,
   'Espiral': `const g = fract(L.ang * 3 + L.r * 2 - t * 0.4);
 return mix(c1, c2, g) .map(v => v * (0.15 + 0.85 * g));`,
   'Destello aleatorio': `// Cada LED parpadea a su ritmo
 const k = hash(i) * 6.28;
 return pow(max(0, sin(t * 3 + k)), 6);`,
-  'Sirena al ritmo': `const lado = x < 0.5 ? c1 : c2;
-const on = (a.beatCount % 2 === 0) === (x < 0.5);
-return on ? lado.map(v => v * (0.2 + a.beat)) : [0, 0, 0];`,
+  'Sirena': `const lado = x < 0.5 ? c1 : c2;
+const on = (floor(t * 3) % 2 === 0) === (x < 0.5);
+return on ? lado : [0, 0, 0];`,
 };
 
 export function compileCustom(id, name, code) {
   const entry = { id, name, code, error: null, fn: null };
   try {
     const body = `const {${Object.keys(HELPERS).join(',')}} = H;\n${code}`;
-    entry.fn = new Function('x', 'y', 'i', 't', 'a', 'L', 'c1', 'c2', 'c3', 'H', body);
+    entry.fn = new Function('x', 'y', 'i', 't', 'L', 'c1', 'c2', 'c3', 'H', body);
     // Prueba de humo para detectar errores de sintaxis/ejecución evidentes
-    entry.fn(0.5, 0.5, 0, 0, { level: 0, bass: 0, mid: 0, treble: 0, beat: 0, beatCount: 0, spec: new Array(32).fill(0) },
-      { r: 0, ang: 0, p: 0, zone: 0, gx: 0, gy: 0 }, [1, 0, 0], [0, 1, 0], [0, 0, 1], HELPERS);
+    entry.fn(0.5, 0.5, 0, 0, { r: 0, ang: 0, p: 0, zone: 0, gx: 0, gy: 0 }, [1, 0, 0], [0, 1, 0], [0, 0, 1], HELPERS);
   } catch (e) {
     entry.error = String(e && e.message ? e.message : e);
   }
@@ -375,13 +292,13 @@ export function listCustoms() { return [...customs.values()]; }
 
 function customEffect(entry) {
   return {
-    id: entry.id, name: entry.name, group: 'custom', audio: true, icon: '</>', custom: true,
+    id: entry.id, name: entry.name, group: 'custom', icon: '</>', custom: true,
     desc: 'Animación escrita por ti.',
     px(L, c, o) {
       if (entry.error || !entry.fn) { o[0] = o[1] = o[2] = 0; return; }
       let r;
       try {
-        r = entry.fn(L.x, L.y, L.i, c.t, c.audio, L, c.c1, c.c2, c.c3, HELPERS);
+        r = entry.fn(L.x, L.y, L.i, c.t, L, c.c1, c.c2, c.c3, HELPERS);
       } catch (e) {
         entry.error = String(e && e.message ? e.message : e);
         o[0] = o[1] = o[2] = 0;
@@ -395,15 +312,72 @@ function customEffect(entry) {
   };
 }
 
+// ───────────────────── Animaciones fotograma a fotograma ─────────────────────
+// entry = { id, name, model, fps, frames: [ [hex|null por LED] ] }  (hold: fotograma fijo mientras se edita)
+
+const frameAnims = new Map();
+
+export function registerFrames(entry) {
+  entry.hold = -1;
+  entry._rgb = null;
+  frameAnims.set(entry.id, entry);
+  return entry;
+}
+export function removeFrames(id) { frameAnims.delete(id); }
+export function listFrames() { return [...frameAnims.values()]; }
+export function invalidateFrames(entry) { entry._rgb = null; }
+
+function frameRgb(entry, f) {
+  if (!entry._rgb) entry._rgb = [];
+  let a = entry._rgb[f];
+  if (!a) {
+    const src = entry.frames[f] || [];
+    a = entry._rgb[f] = new Float32Array(src.length * 3);
+    src.forEach((h, i) => {
+      if (!h) return;
+      const c = hexToRgb(h);
+      a[i * 3] = c[0]; a[i * 3 + 1] = c[1]; a[i * 3 + 2] = c[2];
+    });
+  }
+  return a;
+}
+
+/** Pinta (hex) o borra (null) un LED de un fotograma. */
+export function setFramePixel(entry, f, i, hex) {
+  entry.frames[f][i] = hex;
+  const a = frameRgb(entry, f);
+  const c = hex ? hexToRgb(hex) : [0, 0, 0];
+  a[i * 3] = c[0]; a[i * 3 + 1] = c[1]; a[i * 3 + 2] = c[2];
+}
+
+function framesEffect(entry) {
+  return {
+    id: entry.id, name: entry.name, group: 'custom', icon: '🎞', modelId: entry.model,
+    desc: `Hecha a mano · ${entry.frames.length} fotogramas · solo para ${entry.model}.`,
+    frame(c) {
+      const n = entry.frames.length;
+      const k = entry.hold >= 0 ? entry.hold : Math.floor(c.t * entry.fps) % n;
+      c.fr = frameRgb(entry, Math.min(k, n - 1));
+    },
+    px(L, c, o) {
+      const f = c.fr, k = L.i * 3;
+      if (!f || k >= f.length) { o[0] = o[1] = o[2] = 0; return; }
+      o[0] = f[k]; o[1] = f[k + 1]; o[2] = f[k + 2];
+    },
+  };
+}
+
 const byId = new Map(EFFECTS.map((e) => [e.id, e]));
 export function getEffect(id) {
   if (byId.has(id)) return byId.get(id);
   if (customs.has(id)) return customEffect(customs.get(id));
+  if (frameAnims.has(id)) return framesEffect(frameAnims.get(id));
   return byId.get('solid');
 }
 
 /** ¿Está disponible este efecto en el modelo dado? */
 export function effectAvailable(effect, model) {
+  if (effect.modelId && effect.modelId !== model.id) return false;
   if (effect.needs === 'rgb') return model.color.type === 'rgb';
   if (effect.needs === 'text') return !!model.textable;
   return true;

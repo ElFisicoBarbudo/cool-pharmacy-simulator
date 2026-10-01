@@ -215,3 +215,7 @@ export const BICOLOR_CHOICES = [
   { id: '#ff0000', name: 'Rojo' },
   { id: '#ffff00', name: 'Ámbar (mezcla)' },
 ];
+
+const builtCache = {};
+export const builtModel = (id) => (builtCache[id] ??= buildModel(id));
+export const ledCount = (id) => builtModel(id).leds.length;

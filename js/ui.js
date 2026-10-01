@@ -1,7 +1,7 @@
 import { MODELS, MODEL_IDS, buildModel, BICOLOR_CHOICES } from './models.js';
-import { EFFECTS, GROUPS, getEffect, effectAvailable, listCustoms, compileCustom, removeCustom, CUSTOM_TEMPLATE, CUSTOM_EXAMPLES } from './effects.js';
+import { EFFECTS, GROUPS, getEffect, effectAvailable, listCustoms, listFrames, compileCustom, removeCustom, registerFrames, CUSTOM_TEMPLATE, CUSTOM_EXAMPLES } from './effects.js';
+import { initFrames } from './frames.js';
 import { PALETTES, PROGRAMS } from './presets.js';
-import { rgbToHex, hexToRgb } from './util.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -14,22 +14,21 @@ const el = (tag, props = {}, ...kids) => {
 };
 
 export function initUI(app) {
-  const { state, engine, audio, toast, save } = app;
+  const { state, engine, toast, save } = app;
   let group = 'all';
 
   // ───────────── Pestañas ─────────────
   $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
     $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
     $$('.tabpane').forEach((p) => p.classList.toggle('on', p.id === 'pane-' + b.dataset.tab));
+    frames.onTab(b.dataset.tab);
   }));
 
   // ───────────── Cabecera / escenario ─────────────
   const badge = $('#badge');
   function updateBadge() {
-    const sc = app.liveScene(), ef = getEffect(sc.anim);
-    const a = audio.state;
-    const au = audio.source ? `♪ ${audio.label}` : ef.audio || sc.audioMix ? '♪ simulado' : '';
-    badge.innerHTML = `${engine.model.name} · <em>${ef.name}</em>${au ? ' · ' + au : ''}`;
+    const ef = getEffect(app.liveScene().anim);
+    badge.innerHTML = `${engine.model.name} · <em>${ef.name}</em>`;
   }
 
   $$('[data-view]').forEach((b) => b.addEventListener('click', async () => {
@@ -114,9 +113,6 @@ export function initUI(app) {
     btn.addEventListener('click', () => { app.setModel(id); refreshAll(); });
     modelList.append(btn);
   });
-  const textInput = $('#textInput');
-  textInput.value = state.text;
-  textInput.addEventListener('input', () => { state.text = textInput.value; save(); });
 
   // ───────────── Animaciones ─────────────
   const lockBanner = $('#lockBanner'), animBody = $('#animBody');
@@ -136,7 +132,7 @@ export function initUI(app) {
   }
 
   function allEffects() {
-    const customs = listCustoms().map((c) => getEffect(c.id));
+    const customs = [...listCustoms(), ...listFrames()].map((c) => getEffect(c.id));
     return [...EFFECTS, ...customs];
   }
 
@@ -145,7 +141,7 @@ export function initUI(app) {
     grid.innerHTML = '';
     const model = engine.model;
     const list = allEffects().filter((e) => (group === 'all' || e.group === group) && effectAvailable(e, model));
-    if (!list.length) grid.append(el('div', { className: 'empty', textContent: group === 'custom' ? 'Aún no tienes animaciones propias. Créalas en la pestaña Estudio.' : 'Ninguna disponible para este modelo.' }));
+    if (!list.length) grid.append(el('div', { className: 'empty', textContent: group === 'custom' ? 'Aún no tienes animaciones propias. Créalas en las pestañas Fotogramas o Código.' : 'Ninguna disponible para este modelo.' }));
     list.forEach((e) => {
       const b = el('button', { className: e.id === state.scene.anim ? 'on' : '', title: e.desc },
         el('span', { className: 'ic', textContent: e.icon }), el('span', { className: 'nm', textContent: e.name }));
@@ -168,9 +164,23 @@ export function initUI(app) {
     box.innerHTML = '';
     const ef = getEffect(state.scene.anim);
     (ef.params || []).forEach((p) => {
+      if (p.show && !p.show(state.scene.params)) return;
       const val = state.scene.params[p.id] ?? p.def;
       const wrap = el('div', { className: 'param' }, el('small', { textContent: p.label, style: 'margin:0 0 4px' }));
-      if (p.type === 'select') {
+      if (p.type === 'text') {
+        const inp = el('input', { type: 'text', value: val, maxLength: 80, spellcheck: false, placeholder: 'Escribe tu mensaje…' });
+        inp.addEventListener('input', () => { state.scene.params[p.id] = inp.value; save(); });
+        wrap.append(inp);
+        if (p.presets) {
+          const row = el('div', { className: 'presets' });
+          p.presets.forEach((t) => {
+            const b = el('button', { textContent: t });
+            b.addEventListener('click', () => { state.scene.params[p.id] = t; inp.value = t; save(); });
+            row.append(b);
+          });
+          wrap.append(row);
+        }
+      } else if (p.type === 'select') {
         const row = el('div', { className: 'row' });
         p.options.forEach((o, i) => {
           const b = el('button', { textContent: o, className: i === val ? 'on' : '' });
@@ -186,7 +196,6 @@ export function initUI(app) {
       }
       box.append(wrap);
     });
-    $('#textField').hidden = !engine.model.textable;
   }
 
   function buildColors() {
@@ -220,12 +229,11 @@ export function initUI(app) {
         pal.append(b);
       });
       box.append(pal);
-      if (['rainbow', 'plasma', 'fire', 'audiocolor'].includes(state.scene.anim)) box.append(el('small', { textContent: 'Esta animación genera sus propios colores.' }));
+      if (['rainbow', 'plasma', 'fire'].includes(state.scene.anim)) box.append(el('small', { textContent: 'Esta animación genera sus propios colores.' }));
     }
   }
 
-  const audioMix = $('#audioMix'), sceneSpeed = $('#sceneSpeed');
-  audioMix.addEventListener('input', () => { state.scene.audioMix = +audioMix.value; save(); });
+  const sceneSpeed = $('#sceneSpeed');
   sceneSpeed.addEventListener('input', () => { state.scene.speed = +sceneSpeed.value; save(); });
 
   function refreshAnim() {
@@ -233,10 +241,7 @@ export function initUI(app) {
     lockBanner.hidden = !locked;
     animBody.classList.toggle('locked', locked);
     buildEffects(); buildParams(); buildColors();
-    audioMix.value = state.scene.audioMix || 0;
     sceneSpeed.value = state.scene.speed ?? 1;
-    const ef = getEffect(state.scene.anim);
-    audioMix.disabled = !!ef.audio;
   }
 
   // ───────────── Estudio: editor de código ─────────────
@@ -386,8 +391,9 @@ export function initUI(app) {
     renderSeq(); save(); toast('Programa cargado. Pulsa Reproducir');
   });
   $('#seqExport').addEventListener('click', () => {
-    const data = { app: 'cool-pharmacy-simulator', version: 1, customs: state.customs, seq: state.seq.items };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const skip = (k, v) => (k === '_rgb' || k === 'hold' ? undefined : v);
+    const data = { app: 'cool-pharmacy-simulator', version: 2, customs: state.customs, frameAnims: state.frameAnims, seq: state.seq.items };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, skip, 2)], { type: 'application/json' }));
     el('a', { href: url, download: 'programa-farmacia.json' }).click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -405,99 +411,25 @@ export function initUI(app) {
           compileCustom(c.id, c.name, c.code);
         }
       });
+      (d.frameAnims || []).forEach((f) => {
+        if (state.frameAnims.some((x) => x.id === f.id) || !MODELS[f.model] || !Array.isArray(f.frames) || !f.frames.length) return;
+        state.frameAnims.push(registerFrames({ id: String(f.id), name: String(f.name || 'Importada'), model: f.model, fps: +f.fps || 4, frames: f.frames }));
+      });
+      frames.refresh();
       state.seq.items = d.seq;
       renderSeq(); buildCustomSel(); refreshAnim(); save(); toast('Programa importado');
     } catch (_) { toast('Archivo no válido', true); }
   });
 
-  // ───────────── Audio ─────────────
-  const status = $('#audioStatus');
-  const srcBtns = $$('[data-src]');
-  function setStatus(msg, cls = '') { status.textContent = msg; status.className = 'status ' + cls; }
-  function audioChanged() {
-    const map = { demo: 'demo', mic: 'mic', 'tab-self': 'tab', tab: 'tab', file: 'file' };
-    srcBtns.forEach((b) => b.classList.toggle('on', audio.source && map[b.dataset.src] === audio.source && (b.dataset.src !== 'tab' || audio.label !== 'Esta pestaña') && (b.dataset.src !== 'tab-self' || audio.label === 'Esta pestaña')));
-    if (audio.source) setStatus(`● Escuchando: ${audio.label}`, 'ok');
-    else setStatus('Sin entrada de audio: los efectos ♪ se previsualizan con un ritmo simulado.');
-  }
-  audio.onChange = audioChanged;
-  audioChanged();
-  const run = async (fn) => {
-    try { await fn(); } catch (e) {
-      const msg = e && e.name === 'NotAllowedError' ? 'Permiso denegado.' : (e && e.message) || String(e);
-      setStatus('✖ ' + msg, 'err'); toast(msg, true); audioChanged();
-    }
-  };
-  srcBtns.forEach((b) => b.addEventListener('click', () => {
-    const s = b.dataset.src;
-    if (s === 'demo') run(() => audio.useDemo({ mute: $('#demoMute').checked }));
-    else if (s === 'mic') run(() => audio.useMic());
-    else if (s === 'tab-self') run(() => audio.useTab({ currentTab: true }));
-    else if (s === 'tab') run(() => audio.useTab());
-    else if (s === 'file') $('#audioFile').click();
-    else audio.stop();
-  }));
-  $('#audioFile').addEventListener('change', (e) => {
-    const f = e.target.files[0];
-    e.target.value = '';
-    if (f) run(async () => audio.useFile(f, $('#audioEl')));
-  });
-  $('#sens').value = state.audio.sens;
-  $('#sens').addEventListener('input', (e) => { audio.sens = state.audio.sens = +e.target.value; save(); });
-  $('#autoGain').checked = state.audio.auto;
-  $('#autoGain').addEventListener('change', (e) => { audio.auto = state.audio.auto = e.target.checked; save(); });
-  $('#demoMute').addEventListener('change', (e) => audio.setDemoMute(e.target.checked));
-
-  // YouTube / Spotify
-  function parseEmbed(raw) {
-    let u;
-    try { u = new URL(raw.trim()); } catch (_) { return null; }
-    const host = u.hostname.replace(/^www\.|^m\./, '');
-    if (host === 'youtu.be') return { kind: 'yt', src: `https://www.youtube.com/embed/${u.pathname.slice(1)}?rel=0`, h: 315 };
-    if (host === 'youtube.com' || host === 'music.youtube.com') {
-      const v = u.searchParams.get('v'), list = u.searchParams.get('list');
-      if (v) return { kind: 'yt', src: `https://www.youtube.com/embed/${encodeURIComponent(v)}?rel=0${list ? '&list=' + encodeURIComponent(list) : ''}`, h: 315 };
-      if (list) return { kind: 'yt', src: `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(list)}`, h: 315 };
-      const m = u.pathname.match(/^\/(?:live|shorts|embed)\/([\w-]+)/);
-      if (m) return { kind: 'yt', src: `https://www.youtube.com/embed/${m[1]}?rel=0`, h: 315 };
-    }
-    if (host === 'open.spotify.com') {
-      const m = u.pathname.match(/\/(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]+)/);
-      if (m) return { kind: 'sp', src: `https://open.spotify.com/embed/${m[1]}/${m[2]}`, h: m[1] === 'track' || m[1] === 'episode' ? 152 : 352 };
-    }
-    return null;
-  }
-  $('#embedLoad').addEventListener('click', () => {
-    const p = parseEmbed($('#embedUrl').value);
-    const box = $('#embedBox');
-    box.innerHTML = '';
-    if (!p) { toast('Enlace no reconocido. Usa un enlace de YouTube o Spotify.', true); return; }
-    box.append(el('iframe', { src: p.src, height: p.h, allow: 'autoplay; encrypted-media; clipboard-write; picture-in-picture', loading: 'lazy', title: 'Reproductor' }));
-  });
-  $('#embedUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#embedLoad').click(); });
-
-  // Medidores
-  const mBass = $('#mBass'), mMid = $('#mMid'), mTreble = $('#mTreble'), mBeat = $('#mBeat');
-  const spec = $('#spec'), sctx = spec.getContext('2d');
-  let acc = 0;
-  function drawMeters() {
-    const a = audio.state;
-    const cover = (e, v) => { e.style.width = (1 - Math.min(1, v)) * 100 + '%'; };
-    cover(mBass, a.bass); cover(mMid, a.mid); cover(mTreble, a.treble); cover(mBeat, a.beat);
-    const w = spec.width, h = spec.height, n = a.spec.length, bw = w / n;
-    sctx.clearRect(0, 0, w, h);
-    for (let i = 0; i < n; i++) {
-      const v = a.spec[i];
-      sctx.fillStyle = `hsl(${140 - i * 3.2},90%,55%)`;
-      sctx.fillRect(i * bw + 1, h - v * h, bw - 2, v * h);
-    }
-  }
+  // ───────────── Fotogramas ─────────────
+  const frames = initFrames(app, { refreshAll: () => refreshAll(), refreshAnim: () => refreshAnim(), renderSeq: () => renderSeq(), syncStage: () => syncStageControls() });
 
   // ───────────── Sincronización ─────────────
+  let acc = 0;
   function refreshAll() {
     $$('.model').forEach((b) => b.classList.toggle('on', b.dataset.id === state.model));
     refreshAnim(); syncStageControls(); updateBadge();
-    $('#textField').hidden = !engine.model.textable;
+    frames.refresh();
   }
   $('#brightness').value = state.brightness;
   $('#speed').value = state.speed;
@@ -514,7 +446,7 @@ export function initUI(app) {
       if (acc < 0.06) return;
       acc = 0;
       updateBadge();
-      if ($('#pane-audio').classList.contains('on')) drawMeters();
+      frames.tick();
       pollCustomError();
       if (state.seq.playing) {
         const p = $('#seqProg'), cur = state.seq.items[state.seq.idx];
