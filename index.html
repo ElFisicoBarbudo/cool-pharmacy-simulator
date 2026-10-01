@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cool Pharmacy Simulator</title>
+<meta name="description" content="Simulador de señal luminosa de farmacia: modelos, animaciones personalizadas, vista 3D y reactividad al sonido.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101418'/%3E%3Cpath d='M12 5h8v7h7v8h-7v7h-8v-7H5v-8h7z' fill='%2319ff5c'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><path d="M12 3h8v9h9v8h-9v9h-8v-9H3v-8h9z" fill="currentColor"/></svg>
+      <span>Cool Pharmacy <b>Simulator</b></span>
+    </div>
+    <div class="topinfo" id="badge"></div>
+  </header>
+
+  <main class="layout">
+    <section class="stage" id="stage">
+      <canvas id="c2d"></canvas>
+      <canvas id="c3d" hidden></canvas>
+
+      <div class="hud hud-top">
+        <div class="seg" role="group" aria-label="Vista">
+          <button data-view="2d" class="on">2D</button>
+          <button data-view="3d">3D</button>
+        </div>
+        <label class="inline" id="mountBox" hidden>Montaje
+          <select id="mountSel"></select>
+        </label>
+        <label class="inline" id="rotBox" hidden><input type="checkbox" id="autoRot"> Girar</label>
+        <label class="inline" title="Noche ↔ día">🌙<input type="range" id="ambient" min="0" max="1" step="0.01" value="0">☀</label>
+        <span class="spacer"></span>
+        <button class="icon" id="btnShot" title="Guardar captura (PNG)">📷</button>
+        <button class="icon" id="btnFs" title="Pantalla completa (F)">⛶</button>
+      </div>
+
+      <div class="hud hud-bottom">
+        <button class="power on" id="btnPower" title="Encender / apagar" aria-pressed="true">⏻</button>
+        <label class="inline grow">Brillo <input type="range" id="brightness" min="0.05" max="1" step="0.01" value="1"></label>
+        <label class="inline grow">Velocidad <input type="range" id="speed" min="0.1" max="3" step="0.05" value="1"></label>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="model" class="on">Señal</button>
+        <button role="tab" data-tab="anim">Animación</button>
+        <button role="tab" data-tab="studio">Estudio</button>
+        <button role="tab" data-tab="audio">Audio</button>
+      </nav>
+
+      <div class="tabpane on" id="pane-model">
+        <h3>Modelo de señal</h3>
+        <p class="hint">Desde el modelo básico de un solo color hasta pantallas matriz RGB. Los efectos disponibles dependen del tipo de LED.</p>
+        <div class="models" id="modelList"></div>
+        <label class="field" id="textField">Texto de la pantalla
+          <input type="text" id="textInput" maxlength="80" spellcheck="false">
+          <small>Se usa con el efecto «Texto / Reloj» en las pantallas matriz.</small>
+        </label>
+      </div>
+
+      <div class="tabpane" id="pane-anim">
+        <div class="lockbanner" id="lockBanner" hidden>▶ Secuencia en reproducción. <button id="lockStop" class="link">Detener para editar</button></div>
+        <div id="animBody">
+          <div class="chips" id="effectGroups"></div>
+          <div class="effects" id="effectGrid"></div>
+          <p class="hint" id="effectDesc"></p>
+          <div id="effectParams"></div>
+          <h3>Colores</h3>
+          <div id="colorBox"></div>
+          <h3>Sonido</h3>
+          <label class="field">Modular el brillo con la música
+            <input type="range" id="audioMix" min="0" max="1" step="0.01" value="0">
+            <small id="audioMixHint">Hace que cualquier animación «respire» con el volumen. Activa una fuente en la pestaña Audio.</small>
+          </label>
+          <label class="field">Velocidad de esta animación
+            <input type="range" id="sceneSpeed" min="0.2" max="3" step="0.05" value="1">
+          </label>
+        </div>
+      </div>
+
+      <div class="tabpane" id="pane-studio">
+        <h3>Editor de animaciones</h3>
+        <p class="hint">Crea tu propio efecto con una función de JavaScript que decide el color de cada LED. Se ve en directo y se guarda en tu navegador.</p>
+        <div class="row">
+          <select id="customSel" class="grow"></select>
+          <button id="customNew">＋ Nueva</button>
+          <button id="customDel" class="danger" title="Eliminar">🗑</button>
+        </div>
+        <div id="editorBox" hidden>
+          <label class="field">Nombre <input type="text" id="customName" maxlength="40"></label>
+          <label class="field">Ejemplos
+            <select id="customExamples"></select>
+          </label>
+          <textarea id="customCode" spellcheck="false" autocapitalize="off" autocomplete="off" rows="14"></textarea>
+          <div class="status" id="customStatus"></div>
+        </div>
+
+        <h3>Secuenciador</h3>
+        <p class="hint">Encadena escenas con duración propia para crear un programa completo.</p>
+        <div class="row">
+          <button id="seqAdd">＋ Añadir escena actual</button>
+          <button id="seqPlay" class="primary">▶ Reproducir</button>
+        </div>
+        <div class="seq" id="seqList"></div>
+        <div class="row">
+          <select id="seqPresets" class="grow"></select>
+        </div>
+        <div class="row">
+          <button id="seqExport">⬇ Exportar</button>
+          <button id="seqImport">⬆ Importar</button>
+          <input type="file" id="seqFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
+
+      <div class="tabpane" id="pane-audio">
+        <h3>Fuente de sonido</h3>
+        <div class="srcs">
+          <button data-src="demo">🎵 Pista demo</button>
+          <button data-src="mic">🎤 Micrófono</button>
+          <button data-src="tab-self">🖥 Esta pestaña</button>
+          <button data-src="tab">🪟 Otra pestaña</button>
+          <button data-src="file">📁 Archivo</button>
+          <button data-src="stop" class="danger">⏹ Detener</button>
+        </div>
+        <input type="file" id="audioFile" accept="audio/*" hidden>
+        <audio id="audioEl" controls hidden></audio>
+        <div class="status" id="audioStatus"></div>
+
+        <div class="meters">
+          <div class="meter"><span>Graves</span><i><b id="mBass"></b></i></div>
+          <div class="meter"><span>Medios</span><i><b id="mMid"></b></i></div>
+          <div class="meter"><span>Agudos</span><i><b id="mTreble"></b></i></div>
+          <div class="meter"><span>Ritmo</span><i><b id="mBeat"></b></i></div>
+        </div>
+        <canvas id="spec" width="320" height="56"></canvas>
+
+        <label class="field">Sensibilidad <input type="range" id="sens" min="0.3" max="3" step="0.05" value="1"></label>
+        <label class="inline"><input type="checkbox" id="autoGain" checked> Ganancia automática</label>
+        <label class="inline"><input type="checkbox" id="demoMute"> Silenciar pista demo</label>
+
+        <h3>YouTube / Spotify</h3>
+        <div class="row">
+          <input type="text" id="embedUrl" class="grow" placeholder="Pega un enlace de YouTube o Spotify" spellcheck="false">
+          <button id="embedLoad">Cargar</button>
+        </div>
+        <div id="embedBox"></div>
+        <ol class="steps">
+          <li>Carga el enlace y dale a <b>play</b> en el reproductor.</li>
+          <li>Pulsa <b>🖥 Esta pestaña</b> y, al compartir, marca <b>«Compartir audio de la pestaña»</b>.</li>
+          <li>Las animaciones de ♪ Sonido empezarán a reaccionar.</li>
+        </ol>
+        <p class="hint">Los navegadores no permiten analizar directamente el audio de YouTube o Spotify incrustados, por eso se captura el sonido de la pestaña (Chrome / Edge de escritorio). En Firefox y Safari usa el micrófono o un archivo. Spotify sin sesión iniciada reproduce solo fragmentos de 30 s.</p>
+      </div>
+    </aside>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
