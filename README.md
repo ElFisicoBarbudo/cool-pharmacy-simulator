@@ -33,7 +33,7 @@ workflow `.github/workflows/pages.yml` lo despliega en cada push a `main`.
 Los modelos de un solo color solo ofrecen animaciones de brillo; las que generan color
 (arcoíris, plasma…) aparecen solo en los RGB.
 
-**Animaciones** prediseñadas en 6 grupos (básicas, movimiento, color, efectos, sonido y las tuyas).
+**Animaciones** prediseñadas en 5 grupos (básicas, movimiento, color, efectos y las tuyas).
 
 **Animaciones propias** (pestaña *Estudio*):
 - Editor de código: una función `(x, y, i, t, a, L, c1, c2, c3)` que devuelve el color de cada LED
