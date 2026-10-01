@@ -12,7 +12,8 @@ Los módulos ES necesitan servirse por HTTP (no vale abrir el archivo con `file:
 npx serve .          # o:  python3 -m http.server 8000
 ```
 
-Es un sitio estático: sirve en GitHub Pages, Netlify, etc. tal cual.
+Es un sitio estático. Para publicarlo en GitHub Pages: *Settings → Pages → Source: GitHub Actions*; el
+workflow `.github/workflows/pages.yml` lo despliega en cada push a `main`.
 
 ## Qué incluye
 
